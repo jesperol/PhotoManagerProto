@@ -18,13 +18,6 @@ with io.open(file_path, 'rb') as image_file:
 image = vision.Image(content=image_content)
 
 #%%
-print("=== Labels:")
-response = client.label_detection(image=image)
-labels = response.label_annotations
-print(response)
-print(labels)
-#for label in label_results.label_annotations:
-#    print(f'{label.description} - {label.score}')
 
 #%%
 print('=== Landmarks:')
@@ -47,6 +40,6 @@ faces = response.face_annotations
 for face in faces:
     print(face)
 
-    vertices = (['({},{})'.format(vertex.x, vertex.y) for vertex in face.bounding_poly.vertices])
+    vertices = for vertex in face.bounding_poly.vertices])
     print('face bounds: {}'.format(','.join(vertices)))
 # %%
