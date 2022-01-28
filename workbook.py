@@ -1,7 +1,7 @@
 # %%
 import io, os, json, pprint, requests, base64
 from PIL import Image, ImageDraw
-from google.cloud import vision
+# from google.cloud import vision
 from IPython import display
 
 # Rerun to reset filename and present dialog
@@ -42,7 +42,7 @@ with open(image_file_name, "rb") as image_file:
 # For making REST calls to azure cognitive services
 # We pass binary image data in body...
 def get_cognitive_data(url, params, body):
-    with requests.post(f"{db.creds['cognitive_services_uri']}{url}", data=body, params=params, 
+    with requests.post("{0}{1}".format(db.creds['cognitive_services_uri'], url), data=body, params=params, 
             headers={
                 'Content-Type': 'application/octet-stream', 
                 "Ocp-Apim-Subscription-Key": db.creds["cognitive_services_key1"]
@@ -50,6 +50,7 @@ def get_cognitive_data(url, params, body):
         return request.json() 
 
 # %%
+print("=== Just display a scaled version of the image...")
 pillow_image = Image.open(io.BytesIO(db.image_data)).convert("RGBA")
 pillow_image.thumbnail((512, 512))
 display.display(pillow_image)
@@ -57,37 +58,45 @@ display.display(pillow_image)
 # %%
 # Bashing my head agains the wall... again... and again... the python client lib code is a tad hard to navigate and grok...
 # so had to give up trying to retreive a bearer token from it... perchance query param api-key would work
-def ohmy():
-    print("=== Google Cloud Vision REST annotate endpoint:")
-    body = {
-        "requests": [
-            {
-                "image": { "content": base64.b64encode(db.image_data).decode() }, 
-                "features": [
-                    {"type": "LABEL_DETECTION", "maxResults": 3},
-                    {"type": "FACE_DETECTION", "maxResults": 3},
-                    {"type": "OBJECT_LOCALIZATION", "maxResults": 3},
-                    # {"type": "TEXT_DETECTION", "maxResults": 3, "model": "builtin/latest"},
-                    {"type": "TYPE_UNSPECIFIED", "maxResults": 4},
-                    {"type": "LANDMARK_DETECTION", "maxResults": 3},
-                    {"type": "LOGO_DETECTION", "maxResults": 3},
-                    {"type": "SAFE_SEARCH_DETECTION", "maxResults": 3},
-                    # {"type": "IMAGE_PROPERTIES", "maxResults": 3},
-                    # {"type": "CROP_HINTS", "maxResults": 3},
-                    # {"type": "WEB_DETECTION", "maxResults": 3},
-                    # {"type": "PRODUCT_SEARCH", "maxResults": 3},
-                ],
-            }
-        ]
-    }
+print("=== Google Cloud Vision REST annotate endpoint:")
+body = {
+    "requests": [
+        {
+            "image": { "content": base64.b64encode(db.image_data).decode() }, 
+            "features": [
+                {"type": "LABEL_DETECTION", "maxResults": 3},
+                {"type": "FACE_DETECTION", "maxResults": 3},
+                {"type": "OBJECT_LOCALIZATION", "maxResults": 3},
+                # {"type": "TEXT_DETECTION", "maxResults": 3, "model": "builtin/latest"},
+                {"type": "TYPE_UNSPECIFIED", "maxResults": 4},
+                {"type": "LANDMARK_DETECTION", "maxResults": 3},
+                {"type": "LOGO_DETECTION", "maxResults": 3},
+                {"type": "SAFE_SEARCH_DETECTION", "maxResults": 3},
+                # {"type": "IMAGE_PROPERTIES", "maxResults": 3},
+                # {"type": "CROP_HINTS", "maxResults": 3},
+                # {"type": "WEB_DETECTION", "maxResults": 3},
+                # {"type": "PRODUCT_SEARCH", "maxResults": 3},
+            ],
+        }
+    ]
+}
 
-    with requests.post(db.creds["vision_annotate_url"], params={"key": db.creds["vision_api_key"]}, json=body) as r:
-        responses = r.json()
-        for response in responses['responses']:
-            for annotation in response['faceAnnotations']:
-                del annotation['landmarks']
-        pprint.pprint(responses, compact=True, width=120)
-ohmy()      
+with requests.post(db.creds["vision_annotate_url"], params={"key": db.creds["vision_api_key"]}, json=body) as r:
+    responses = r.json()
+    for response in responses['responses']:
+        for annotation in response['faceAnnotations']:
+            del annotation['landmarks']
+
+pillow_image = Image.open(io.BytesIO(db.image_data)).convert("RGBA")
+image_draw = ImageDraw.Draw(pillow_image)
+for i, face in enumerate(responses['responses'][0]['faceAnnotations']):
+    vertices = face['boundingPoly']['vertices']
+    image_draw.rectangle(xy=(vertices[0]['x'], vertices[0]['y'], vertices[2]['x'], vertices[2]['y']),
+            outline=colors[i%len(colors)], width=5)
+
+pillow_image.thumbnail((1024, 1024))
+display.display(pillow_image)
+pprint.pprint(responses, compact=True, width=120)
 
 # # %%
 # print("=== Google Cloud Vision Labels:")
@@ -161,11 +170,10 @@ for i, face in enumerate(faces):
     text = f"\nFace {i}\n\tLocation: {face_rectangle}\n\tAge: {face['faceAttributes']['age']}\n\tEmotions: {face['faceAttributes']['emotion']}"
     print(text)
     image_draw.rectangle((face_rectangle['left'], face_rectangle['top'], 
-            face_rectangle['left']+face_rectangle['width'], face_rectangle['top']+face_rectangle['height']), outline=colors[i%len(colors)], width=3)
+            face_rectangle['left']+face_rectangle['width'], face_rectangle['top']+face_rectangle['height']), outline=colors[i%len(colors)], width=5)
     # image_draw.multiline_text((face_rectangle['left'], face_rectangle['top']), text, font=ImageFont.truetype("tahoma.ttf", size=48))
 
-from IPython import display
-pillow_image.thumbnail((512, 512))
+pillow_image.thumbnail((1024, 1024))
 display.display(pillow_image)
 
 # %%
