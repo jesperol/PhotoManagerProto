@@ -86,14 +86,18 @@ with requests.post(db.creds["vision_annotate_url"], params=params, json=body) as
             del annotation['landmarks']
         del response['webDetection']['visuallySimilarImages']
 
+pprint.pprint(responses, compact=True, width=120)
+
 pillow_image = Image.open(io.BytesIO(db.image_data)).convert("RGBA")
 image_draw = ImageDraw.Draw(pillow_image)
 for i, face in enumerate(responses['responses'][0]['faceAnnotations']):
     vertices = face['boundingPoly']['vertices']
-    image_draw.rectangle(xy=(vertices[0]['x'], vertices[0]['y'], vertices[2]['x'], vertices[2]['y']),
+    try:
+        image_draw.rectangle(xy=(vertices[0]['x'], vertices[0]['y'], vertices[2]['x'], vertices[2]['y']),
             outline=colors[i%len(colors)], width=5)
+    except KeyError as e:
+        print(e)
 
-pprint.pprint(responses, compact=True, width=120)
 pillow_image.thumbnail((1024, 1024))
 display.display(pillow_image)
 
@@ -158,3 +162,4 @@ params = {
 
 data = get_cognitive_data("/vision/v3.2/analyze", params, db.image_data)
 pprint.pprint(data)
+# %%
