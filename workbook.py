@@ -1,7 +1,7 @@
 # %%
-print("=== Initializing...")
+# === Initializing...
 import io, sys, json, pprint, requests, base64
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 from IPython import display
 
 # Rerun to reset filename and present dialog
@@ -15,8 +15,8 @@ def select_image_file():
     return filename or sys.exit(1)
 
 # Damnit, FIX:
-class glob: pass
-db = glob()
+class Db: pass
+db = Db()
 
 # Also load azure cognitive services endpoint uri and our keys. as store in the same file... 
 with open("photo-manager-proto.json") as f:
@@ -32,6 +32,8 @@ if not image_file_name:
 with open(image_file_name, "rb") as image_file:
     db.image_data = image_file.read()
 
+db.pillow_image = Image.open(io.BytesIO(db.image_data)).convert("RGBA")
+
 # For making REST calls to azure cognitive services
 # We pass binary image data in body...
 def get_cognitive_data(url, params, body):
@@ -44,14 +46,14 @@ def get_cognitive_data(url, params, body):
 
 
 # %%
-print("=== Just display a scaled version of the image...")
-pillow_image = Image.open(io.BytesIO(db.image_data)).convert("RGBA")
-pillow_image.thumbnail((512, 512))
-display.display(pillow_image)
+# === Just display a scaled version of the image...
+display.display(ImageOps.contain(ImageOps.exif_transpose(db.pillow_image), (512, 512)))
 
 
 # %%
-print("=== Google Cloud Vision REST annotate endpoint:")
+# === Google Cloud Vision REST annotate endpoint:
+
+# Wants base64 encoded image data in requests.image.content...
 body = {
     "requests": [
         {
@@ -88,22 +90,21 @@ with requests.post(db.creds["vision_annotate_url"], params=params, json=body) as
 
 pprint.pprint(responses, compact=True, width=120)
 
-pillow_image = Image.open(io.BytesIO(db.image_data)).convert("RGBA")
-image_draw = ImageDraw.Draw(pillow_image)
+pillow_image_copy = db.pillow_image.copy()
+image_draw = ImageDraw.Draw(pillow_image_copy)
 for i, face in enumerate(responses['responses'][0]['faceAnnotations']):
-    vertices = face['boundingPoly']['vertices']
+    vertices = face['fdBoundingPoly']['vertices']
     try:
         image_draw.rectangle(xy=(vertices[0]['x'], vertices[0]['y'], vertices[2]['x'], vertices[2]['y']),
             outline=colors[i%len(colors)], width=5)
     except KeyError as e:
         print(e)
 
-pillow_image.thumbnail((1024, 1024))
-display.display(pillow_image)
+display.display(ImageOps.contain(pillow_image_copy, (1024, 1024)))
 
 
 # %%
-print("=== Azure Cognitive Services - Face API: Detect")
+# === Azure Cognitive Services - Face API: Detect
 
 params = {
     # Request parameters
@@ -122,8 +123,9 @@ faces = get_cognitive_data("/face/v1.0/detect", params, db.image_data)
 #     del face['faceLandmarks']
 # pprint.pprint(faces)
 
-pillow_image = Image.open(io.BytesIO(db.image_data)).convert("RGBA")
-image_draw = ImageDraw.Draw(pillow_image)
+# Detect endpoint will return transposed rectangle coordinates, so let's transpose the image before drawing 
+pillow_image_copy = ImageOps.exif_transpose(db.pillow_image)
+image_draw = ImageDraw.Draw(pillow_image_copy)
 
 for i, face in enumerate(faces):
     face_rectangle = face["faceRectangle"]
@@ -134,12 +136,12 @@ for i, face in enumerate(faces):
             face_rectangle['left']+face_rectangle['width'], face_rectangle['top']+face_rectangle['height']), outline=colors[i%len(colors)], width=5)
     # image_draw.multiline_text((face_rectangle['left'], face_rectangle['top']), text, font=ImageFont.truetype("tahoma.ttf", size=48))
 
-pillow_image.thumbnail((1024, 1024))
-display.display(pillow_image)
+# Vision endpont does not return transposed face rectangles, so transpose after drawing
+display.display(ImageOps.exif_transpose(ImageOps.contain(pillow_image_copy, (1024, 1024))))
 
 
 # %%
-print("=== Azure Cognitive Services - Vision API: Describe")
+# === Azure Cognitive Services - Vision API: Describe
 
 params = {
     'language': 'en',
@@ -151,7 +153,7 @@ pprint.pprint(data)
 
 
 # %%
-print("=== Azure Cognitive Services - Vision API: Analyze")
+# === Azure Cognitive Services - Vision API: Analyze
 
 params = {
     "visualFeatures": "Categories,Adult,Tags,Brands,Color,Description,Faces,ImageType,Objects",
@@ -162,4 +164,3 @@ params = {
 
 data = get_cognitive_data("/vision/v3.2/analyze", params, db.image_data)
 pprint.pprint(data)
-# %%
